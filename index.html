@@ -54,16 +54,16 @@
 
                 <div class="api-key-section">
                     <div class="input-field">
-                        <label for="apiKey">豆包API Key（可选，AI预测时需要）</label>
-                        <input type="password" id="apiKey" placeholder="输入你的豆包API Key，或留空使用增强算法">
+                        <label for="apiKey">API Key（可选，AI预测时需要）</label>
+                        <input type="password" id="apiKey" placeholder="输入你的API Key，或留空使用增强算法">
                     </div>
                     <small>获取API Key: <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey??apikey=%7B%7D" target="_blank">火山引擎控制台 - 方舟大模型专用API Key</a>（免费注册）</small>
-                    <small style="display: block; margin-top: 5px; color: #888;">⚠️ 如果不提供API Key，将使用增强算法进行预测（不是真正的豆包AI）</small>
+                    <small style="display: block; margin-top: 5px; color: #888;">⚠️ 如果不提供API Key，将使用增强算法进行预测（不是真正的AI）</small>
                 </div>
 
                 <div class="button-group">
                     <button id="calculateBtn" class="calculate-btn">🔮 算卦算法预测</button>
-                    <button id="aiCalculateBtn" class="calculate-btn ai-btn">🤖 豆包AI预测</button>
+                    <button id="aiCalculateBtn" class="calculate-btn ai-btn">🤖 AI预测</button>
                 </div>
             </div>
 
@@ -78,7 +78,7 @@
                         <h3 id="reasoningTitle">📊 分析依据</h3>
                         <p id="reasoningText"></p>
                         <div id="doubaoOriginalContent" class="doubao-original hidden">
-                            <button id="toggleDoubaoContent" class="toggle-btn">📖 查看豆包原始回复</button>
+                            <button id="toggleDoubaoContent" class="toggle-btn">📖 查看原始回复</button>
                             <div id="doubaoContent" class="doubao-content"></div>
                         </div>
                     </div>
