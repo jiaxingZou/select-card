@@ -62,8 +62,7 @@
                 </div>
 
                 <div class="button-group">
-                    <button id="calculateBtn" class="calculate-btn">🔮 算卦算法预测</button>
-                    <button id="aiCalculateBtn" class="calculate-btn ai-btn">🤖 AI预测</button>
+                    <button id="predictBtn" class="calculate-btn">🔮 预测</button>
                 </div>
             </div>
 
@@ -72,17 +71,13 @@
                 <div class="result-card">
                     <div class="recommendation">
                         <div class="card-number">推荐抽第 <span id="recommendedCard"></span> 张牌</div>
-                        <div class="probability">出货概率: <span id="probability"></span>%</div>
+                        <div class="probability" id="probabilitySection">出货概率: <span id="probability"></span>%</div>
                     </div>
                     <div class="reasoning">
                         <h3 id="reasoningTitle">📊 分析依据</h3>
                         <p id="reasoningText"></p>
-                        <div id="doubaoOriginalContent" class="doubao-original hidden">
-                            <button id="toggleDoubaoContent" class="toggle-btn">📖 查看原始回复</button>
-                            <div id="doubaoContent" class="doubao-content"></div>
-                        </div>
                     </div>
-                    <div class="cards-display">
+                    <div class="cards-display" id="cardsDisplay">
                         <h3>🎴 五张牌位置</h3>
                         <div class="cards-grid">
                             <div class="card-item" id="card1">

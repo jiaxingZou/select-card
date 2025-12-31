@@ -168,8 +168,16 @@ function generateReasoning(startTime, endTime, duration, bosses, recommended, pr
 
 // 重置表单
 function resetForm() {
-    document.getElementById('startTime').value = '';
-    document.getElementById('endTime').value = '';
+    // 更新时间：结束时间为当前时间，开始时间为30分钟前
+    const now = new Date();
+    const nowStr = formatLocalDateTime(now);
+    document.getElementById('endTime').value = nowStr;
+    
+    const startTime = new Date(now.getTime() - 30 * 60 * 1000);
+    const startStr = formatLocalDateTime(startTime);
+    document.getElementById('startTime').value = startStr;
+    
+    // 清空Boss选择
     document.getElementById('boss1').value = '';
     document.getElementById('boss2').value = '';
     document.getElementById('boss3').value = '';
@@ -198,35 +206,96 @@ async function aiPredict(startTime, endTime, bosses, apiKey) {
         // 获取API Key: https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey??apikey=%7B%7D
         if (apiKey && apiKey.trim()) {
             try {
-                // 使用Bearer token认证方式: Authorization: Bearer <你的API_Key>
-                const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+                // 使用新的 /api/v3/responses 接口格式
+                // 参考: https://ark.cn-beijing.volces.com/api/v3/responses
+                // 注意: model 字段可以使用模型名称（如 "doubao-seed-1.8"）或接入点ID（如 "ep-20251231152211-nmpkk"）
+                // 接入点ID需要在火山引擎控制台的"在线推理"页面创建接入点后获取
+                const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        model: "doubao-seed-1.8",
-                        messages: [
+                        model: "ep-20251231152211-nmpkk", // 可以替换为你的接入点ID，格式: "ep-xxxxxxxxx"
+                        input: [
                             {
-                                role: 'user',
-                                content: prompt
+                                role: "user",
+                                content: [
+                                    {
+                                        type: "input_text",
+                                        text: prompt
+                                    }
+                                ]
                             }
-                        ],
-                        temperature: 0.7,
-                        max_completion_tokens: 1000
+                        ]
                     })
                 });
                 
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.choices && data.choices[0] && data.choices[0].message) {
-                        const aiText = data.choices[0].message.content;
-                        // 标记使用了豆包API，并保存原始内容
-                        return parseAIResponse(aiText, startTime, endTime, duration, bosses, true, aiText);
+                    let aiText = '';
+                    let reasoningText = '';
+                    let originalResponse = '';
+                    
+                    // 处理新的JSON格式：output数组格式
+                    if (data.output && Array.isArray(data.output)) {
+                        // 遍历output数组，查找message类型的内容
+                        for (const item of data.output) {
+                            if (item.type === 'message' && item.content && Array.isArray(item.content)) {
+                                // 提取message中的文本内容
+                                for (const contentItem of item.content) {
+                                    if (contentItem.type === 'output_text' && contentItem.text) {
+                                        aiText = contentItem.text;
+                                        originalResponse = contentItem.text;
+                                    }
+                                }
+                            } else if (item.type === 'reasoning' && item.summary && Array.isArray(item.summary)) {
+                                // 提取推理过程
+                                for (const summaryItem of item.summary) {
+                                    if (summaryItem.type === 'summary_text' && summaryItem.text) {
+                                        reasoningText = summaryItem.text;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 如果找到了内容，记录日志
+                        if (aiText) {
+                            console.log('成功提取AI回复:', aiText.substring(0, 100) + '...');
+                        }
+                        if (reasoningText) {
+                            console.log('成功提取推理过程:', reasoningText.substring(0, 100) + '...');
+                        }
+                    }
+                    
+                    // 如果没有找到新格式，尝试旧格式
+                    if (!aiText) {
+                        if (data.output && data.output.choices && data.output.choices[0] && data.output.choices[0].message) {
+                            // 新格式: output.choices[0].message.content
+                            aiText = data.output.choices[0].message.content || '';
+                        } else if (data.choices && data.choices[0] && data.choices[0].message) {
+                            // 旧格式: choices[0].message.content
+                            aiText = data.choices[0].message.content || '';
+                        } else if (data.output && data.output.text) {
+                            // 直接文本格式: output.text
+                            aiText = data.output.text || '';
+                        } else if (data.text) {
+                            // 直接文本格式: text
+                            aiText = data.text || '';
+                        } else if (data.output && data.output.choices && data.output.choices[0] && data.output.choices[0].content) {
+                            // 另一种格式: output.choices[0].content
+                            aiText = data.output.choices[0].content || '';
+                        }
+                        originalResponse = aiText;
+                    }
+                    
+                    if (aiText) {
+                        // 标记使用了豆包API，并保存原始内容和推理过程
+                        return parseAIResponse(aiText, startTime, endTime, duration, bosses, true, originalResponse, reasoningText);
                     } else {
                         console.error('豆包API返回数据格式异常:', data);
-                        throw new Error('API返回数据格式不正确');
+                        throw new Error('API返回数据格式不正确，无法解析响应内容');
                     }
                 } else {
                     const errorData = await response.text();
@@ -401,25 +470,51 @@ function generateAIAnalysis(startTime, endTime, duration, bosses, recommended, p
 }
 
 // 解析AI API响应（如果使用了API）
-function parseAIResponse(aiText, startTime, endTime, duration, bosses, isDoubao = false, originalText = '') {
+function parseAIResponse(aiText, startTime, endTime, duration, bosses, isDoubao = false, originalText = '', reasoningText = '') {
     // 尝试从AI回复中提取推荐位置和概率
-    // 如果没有找到，使用增强算法
-    const cardMatch = aiText.match(/位置[：:]\s*(\d)|推荐[：:]\s*第?(\d)|选择[：:]\s*第?(\d)|第?(\d)张牌/);
+    // 支持多种格式：5号牌子、第5张牌、位置5、推荐5等
     let recommendedCard = 3; // 默认
     
-    if (cardMatch) {
-        recommendedCard = parseInt(cardMatch[1] || cardMatch[2] || cardMatch[3] || cardMatch[4]) || 3;
-        recommendedCard = Math.max(1, Math.min(5, recommendedCard));
+    // 更全面的正则表达式匹配
+    const cardPatterns = [
+        /(\d)号牌子/,
+        /第(\d)张牌/,
+        /位置[：:]\s*(\d)/,
+        /推荐[：:]\s*第?(\d)/,
+        /选择[：:]\s*第?(\d)/,
+        /选(\d)号/,
+        /(\d)号牌/
+    ];
+    
+    for (const pattern of cardPatterns) {
+        const match = aiText.match(pattern);
+        if (match) {
+            const cardNum = parseInt(match[1]);
+            if (cardNum >= 1 && cardNum <= 5) {
+                recommendedCard = cardNum;
+                break;
+            }
+        }
     }
     
     // 使用AI回复作为分析，但概率用增强算法计算
     const result = enhancedAIPredict(startTime, endTime, duration, bosses);
     
     if (isDoubao && originalText) {
-        // 使用豆包API时，保存原始内容
-        result.reasoning = `🤖 豆包AI分析：\n\n${aiText}\n\n基于豆包AI的推理，结合算法分析，推荐位置${recommendedCard}。`;
+        // 使用豆包API时，保存原始内容和推理过程
+        let reasoning = `🤖 豆包AI分析：\n\n${aiText}\n\n`;
+        
+        // 如果有推理过程，添加到分析中
+        if (reasoningText) {
+            reasoning += `\n💭 AI推理过程：\n${reasoningText}\n\n`;
+        }
+        
+        reasoning += `基于豆包AI的推理，结合算法分析，推荐位置${recommendedCard}。`;
+        
+        result.reasoning = reasoning;
         result.isDoubao = true;
         result.doubaoOriginal = originalText;
+        result.doubaoReasoning = reasoningText; // 保存推理过程
     } else {
         result.reasoning = `🤖 AI分析：\n\n${aiText}\n\n基于AI的推理，结合算法分析，推荐位置${recommendedCard}。`;
         result.isDoubao = false;
@@ -437,67 +532,62 @@ function parseAIResponse(aiText, startTime, endTime, duration, bosses, isDoubao 
 }
 
 // 显示结果（统一使用同一个函数）
-function displayResult(result, isAI = false) {
+function displayResult(result, showProbability = true) {
     const resultSection = document.getElementById('resultSection');
     resultSection.classList.remove('hidden');
     
     // 更新标题
     const resultTitle = document.getElementById('resultTitle');
     const reasoningTitle = document.getElementById('reasoningTitle');
-    const doubaoOriginalDiv = document.getElementById('doubaoOriginalContent');
-    const doubaoContentDiv = document.getElementById('doubaoContent');
-    const toggleBtn = document.getElementById('toggleDoubaoContent');
+    const probabilitySection = document.getElementById('probabilitySection');
+    const cardsDisplay = document.getElementById('cardsDisplay');
     
-    if (isAI) {
-        if (result.isDoubao) {
-            resultTitle.textContent = '✨ 豆包AI预测结果';
-            reasoningTitle.textContent = '🧠 豆包AI分析';
-            // 显示豆包原始内容区域
-            doubaoOriginalDiv.classList.remove('hidden');
-            doubaoContentDiv.textContent = result.doubaoOriginal || '';
-            toggleBtn.textContent = '📖 查看豆包原始回复';
-            doubaoContentDiv.classList.add('hidden');
-        } else {
-            resultTitle.textContent = '✨ AI预测结果（增强算法）';
-            reasoningTitle.textContent = '🧠 AI分析';
-            doubaoOriginalDiv.classList.add('hidden');
-        }
+    // 根据是否有API key决定显示内容
+    if (result.isDoubao) {
+        // 使用豆包API，隐藏概率
+        resultTitle.textContent = '✨ 豆包AI预测结果';
+        reasoningTitle.textContent = '🧠 豆包AI分析';
+        probabilitySection.classList.add('hidden');
+        cardsDisplay.classList.add('hidden');
     } else {
-        resultTitle.textContent = '✨ 算卦算法结果';
-        reasoningTitle.textContent = '📊 算卦依据';
-        doubaoOriginalDiv.classList.add('hidden');
+        // 使用增强算法，显示概率
+        resultTitle.textContent = '✨ 预测结果';
+        reasoningTitle.textContent = '📊 分析依据';
+        probabilitySection.classList.remove('hidden');
+        cardsDisplay.classList.remove('hidden');
+        
+        // 显示概率
+        document.getElementById('probability').textContent = result.recommendedProbability.toFixed(1);
+        
+        // 显示各位置概率
+        result.allProbabilities.forEach((prob) => {
+            const cardItem = document.getElementById(`card${prob.card}`);
+            const probElement = document.getElementById(`prob${prob.card}`);
+            
+            probElement.textContent = `${prob.probability.toFixed(1)}%`;
+            
+            cardItem.classList.remove('recommended');
+            if (prob.card === result.recommendedCard) {
+                cardItem.classList.add('recommended');
+            }
+        });
     }
     
+    // 显示推荐牌号和分析
     document.getElementById('recommendedCard').textContent = result.recommendedCard;
-    document.getElementById('probability').textContent = result.recommendedProbability.toFixed(1);
     document.getElementById('reasoningText').innerHTML = result.reasoning.replace(/\n/g, '<br>');
     
-    result.allProbabilities.forEach((prob) => {
-        const cardItem = document.getElementById(`card${prob.card}`);
-        const probElement = document.getElementById(`prob${prob.card}`);
-        
-        probElement.textContent = `${prob.probability.toFixed(1)}%`;
-        
-        cardItem.classList.remove('recommended');
-        if (prob.card === result.recommendedCard) {
-            cardItem.classList.add('recommended');
-        }
-    });
-    
-    // 切换豆包原始内容的显示
-    if (toggleBtn) {
-        toggleBtn.onclick = function() {
-            if (doubaoContentDiv.classList.contains('hidden')) {
-                doubaoContentDiv.classList.remove('hidden');
-                toggleBtn.textContent = '📖 隐藏豆包原始回复';
-            } else {
-                doubaoContentDiv.classList.add('hidden');
-                toggleBtn.textContent = '📖 查看豆包原始回复';
-            }
-        };
-    }
-    
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 将Date对象格式化为本地时区的datetime-local格式 (YYYY-MM-DDTHH:mm)
+function formatLocalDateTime(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 // 事件监听
@@ -505,50 +595,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化Boss选择列表
     initBossSelects();
     
-    // 设置默认时间（当前时间）
+    // 设置默认时间（当前时间，使用本地时区）
     const now = new Date();
-    const nowStr = now.toISOString().slice(0, 16);
+    const nowStr = formatLocalDateTime(now);
     document.getElementById('endTime').value = nowStr;
     
-    // 设置默认开始时间（30分钟前）
+    // 设置默认开始时间（30分钟前，使用本地时区）
     const startTime = new Date(now.getTime() - 30 * 60 * 1000);
-    const startStr = startTime.toISOString().slice(0, 16);
+    const startStr = formatLocalDateTime(startTime);
     document.getElementById('startTime').value = startStr;
     
-    // 算卦算法按钮点击事件
-    document.getElementById('calculateBtn').addEventListener('click', function() {
-        const startTime = document.getElementById('startTime').value;
-        const endTime = document.getElementById('endTime').value;
-        const boss1 = document.getElementById('boss1').value;
-        const boss2 = document.getElementById('boss2').value;
-        const boss3 = document.getElementById('boss3').value;
-        
-        // 验证输入
-        if (!startTime || !endTime || !boss1 || !boss2 || !boss3) {
-            alert('请填写完整信息！');
-            return;
-        }
-        
-        // 验证时间顺序
-        if (new Date(startTime) >= new Date(endTime)) {
-            alert('结束时间必须晚于开始时间！');
-            return;
-        }
-        
-        // 验证Boss是否重复（第二个和第三个Boss不能重复）
-        if (boss2 === boss3) {
-            alert('第二个和第三个Boss不能重复！');
-            return;
-        }
-        
-        // 执行算卦
-        const bosses = [boss1, boss2, boss3];
-        const result = calculateFortune(startTime, endTime, bosses);
-        displayResult(result, false);
-    });
-    
-    // AI预测按钮点击事件
-    document.getElementById('aiCalculateBtn').addEventListener('click', async function() {
+    // 预测按钮点击事件（统一处理）
+    document.getElementById('predictBtn').addEventListener('click', async function() {
         const startTime = document.getElementById('startTime').value;
         const endTime = document.getElementById('endTime').value;
         const boss1 = document.getElementById('boss1').value;
@@ -574,34 +632,52 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // 显示加载状态
+        const bosses = [boss1, boss2, boss3];
         const btn = this;
         const originalText = btn.textContent;
-        btn.textContent = '🤖 AI分析中...';
-        btn.disabled = true;
         
-        try {
-            // 执行AI预测
-            const bosses = [boss1, boss2, boss3];
-            const result = await aiPredict(startTime, endTime, bosses, apiKey);
-            displayResult(result, true);
-        } catch (error) {
-            // 显示详细错误信息
-            const errorMsg = error.message || '未知错误';
-            console.error('AI预测错误详情:', error);
-            alert('AI预测失败：' + errorMsg + '\n\n将使用增强算法作为备选方案。\n\n提示：请检查API Key是否正确，或查看浏览器控制台获取详细错误信息。');
-            // 即使出错也显示增强算法的结果
-            const bosses = [boss1, boss2, boss3];
-            const start = new Date(startTime);
-            const end = new Date(endTime);
-            const duration = (end - start) / 1000;
-            const result = enhancedAIPredict(startTime, endTime, duration, bosses);
-            result.isDoubao = false;
-            result.doubaoOriginal = '';
-            displayResult(result, true);
-        } finally {
-            btn.textContent = originalText;
-            btn.disabled = false;
+        // 如果有API Key，使用豆包API
+        if (apiKey && apiKey.trim()) {
+            btn.textContent = '🤖 AI分析中...';
+            btn.disabled = true;
+            
+            try {
+                const result = await aiPredict(startTime, endTime, bosses, apiKey);
+                displayResult(result);
+            } catch (error) {
+                // 显示详细错误信息
+                const errorMsg = error.message || '未知错误';
+                console.error('AI预测错误详情:', error);
+                alert('AI预测失败：' + errorMsg + '\n\n将使用增强算法作为备选方案。\n\n提示：请检查API Key是否正确，或查看浏览器控制台获取详细错误信息。');
+                // 即使出错也显示增强算法的结果
+                const start = new Date(startTime);
+                const end = new Date(endTime);
+                const duration = (end - start) / 1000;
+                const result = enhancedAIPredict(startTime, endTime, duration, bosses);
+                result.isDoubao = false;
+                result.doubaoOriginal = '';
+                displayResult(result);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        } else {
+            // 没有API Key，使用增强算法
+            btn.textContent = '🔮 计算中...';
+            btn.disabled = true;
+            
+            try {
+                const start = new Date(startTime);
+                const end = new Date(endTime);
+                const duration = (end - start) / 1000;
+                const result = enhancedAIPredict(startTime, endTime, duration, bosses);
+                result.isDoubao = false;
+                result.doubaoOriginal = '';
+                displayResult(result);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
     });
     
