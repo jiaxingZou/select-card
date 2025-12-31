@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>剑网三试炼之地 - 抽牌算卦助手</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗡️ 剑网三试炼之地抽牌助手</h1>
+            <p class="subtitle">AI算卦助你出货，玄学改命！</p>
+        </header>
+
+        <main>
+            <div class="form-section">
+                <h2>📝 输入本次试炼信息</h2>
+                
+                <div class="time-input-group">
+                    <div class="input-field">
+                        <label for="startTime">开始时间</label>
+                        <input type="datetime-local" id="startTime" required>
+                    </div>
+                    <div class="input-field">
+                        <label for="endTime">结束时间</label>
+                        <input type="datetime-local" id="endTime" required>
+                    </div>
+                </div>
+
+                <div class="boss-input-group">
+                    <h3>选择本次打的3个Boss（按顺序）</h3>
+                    <div class="boss-selects">
+                        <div class="input-field">
+                            <label for="boss1">第1个Boss</label>
+                            <select id="boss1" required>
+                                <option value="">请选择...</option>
+                            </select>
+                        </div>
+                        <div class="input-field">
+                            <label for="boss2">第2个Boss</label>
+                            <select id="boss2" required>
+                                <option value="">请选择...</option>
+                            </select>
+                        </div>
+                        <div class="input-field">
+                            <label for="boss3">第3个Boss</label>
+                            <select id="boss3" required>
+                                <option value="">请选择...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="api-key-section">
+                    <div class="input-field">
+                        <label for="apiKey">豆包API Key（可选，AI预测时需要）</label>
+                        <input type="password" id="apiKey" placeholder="输入你的豆包API Key，或留空使用增强算法">
+                    </div>
+                    <small>获取API Key: <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey??apikey=%7B%7D" target="_blank">火山引擎控制台 - 方舟大模型专用API Key</a>（免费注册）</small>
+                    <small style="display: block; margin-top: 5px; color: #888;">⚠️ 如果不提供API Key，将使用增强算法进行预测（不是真正的豆包AI）</small>
+                </div>
+
+                <div class="button-group">
+                    <button id="calculateBtn" class="calculate-btn">🔮 算卦算法预测</button>
+                    <button id="aiCalculateBtn" class="calculate-btn ai-btn">🤖 豆包AI预测</button>
+                </div>
+            </div>
+
+            <div id="resultSection" class="result-section hidden">
+                <h2 id="resultTitle">✨ 预测结果</h2>
+                <div class="result-card">
+                    <div class="recommendation">
+                        <div class="card-number">推荐抽第 <span id="recommendedCard"></span> 张牌</div>
+                        <div class="probability">出货概率: <span id="probability"></span>%</div>
+                    </div>
+                    <div class="reasoning">
+                        <h3 id="reasoningTitle">📊 分析依据</h3>
+                        <p id="reasoningText"></p>
+                        <div id="doubaoOriginalContent" class="doubao-original hidden">
+                            <button id="toggleDoubaoContent" class="toggle-btn">📖 查看豆包原始回复</button>
+                            <div id="doubaoContent" class="doubao-content"></div>
+                        </div>
+                    </div>
+                    <div class="cards-display">
+                        <h3>🎴 五张牌位置</h3>
+                        <div class="cards-grid">
+                            <div class="card-item" id="card1">
+                                <div class="card-number-small">1</div>
+                                <div class="card-prob" id="prob1">--</div>
+                            </div>
+                            <div class="card-item" id="card2">
+                                <div class="card-number-small">2</div>
+                                <div class="card-prob" id="prob2">--</div>
+                            </div>
+                            <div class="card-item" id="card3">
+                                <div class="card-number-small">3</div>
+                                <div class="card-prob" id="prob3">--</div>
+                            </div>
+                            <div class="card-item" id="card4">
+                                <div class="card-number-small">4</div>
+                                <div class="card-prob" id="prob4">--</div>
+                            </div>
+                            <div class="card-item" id="card5">
+                                <div class="card-number-small">5</div>
+                                <div class="card-prob" id="prob5">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button id="resetBtn" class="reset-btn">重新预测</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>⚠️ 本工具仅供娱乐，玄学改命，信则有不信则无</p>
+        </footer>
+    </div>
+
+    <script src="boss-list.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+
